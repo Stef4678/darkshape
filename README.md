@@ -4,8 +4,6 @@ An [Eagle](https://eagle.cool) plugin that turns photographs into clean, solid
 silhouettes. Work on a single photo with a live preview, or select a whole
 folder's worth of images and convert them in one batch.
 
-![Darkshape](logo.png)
-
 ![The Darkshape window in Eagle, showing the original photograph and the rendered silhouette side by side](assets/Screenshot%202026-09-13%20132746.png)
 
 ---
