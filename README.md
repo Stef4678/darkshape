@@ -39,9 +39,16 @@ other asset.
 
 ## Install
 
+Eagle plugins are just a folder, so installation is a clone and a copy:
+
 ```
+git clone https://github.com/Stef4678/darkshape.git
+cd darkshape
 pwsh -File tools/install.ps1
 ```
+
+Or download the repository as a ZIP and run the same script from the unpacked
+folder.
 
 Then restart Eagle so it rescans its plugin directory. The plugin appears in
 Eagle's plugin list as **Darkshape**.
@@ -392,12 +399,16 @@ It uses the real engine behind a small canvas shim and prints a luminance
 histogram, which is how the Luminous preset was tuned against a set of
 reference plates.
 
-The tests need `jsdom`, and the render tool needs `pngjs`, both installed
-outside the plugin's runtime footprint:
+The tests need `jsdom`, and the render tool needs `pngjs` and `jpeg-js`. Both
+are declared as dev dependencies and deliberately kept out of the plugin's
+runtime footprint — nothing in `js/` requires them:
 
 ```
-npm install --cache .\.npm-cache --prefix .\.devtools jsdom pngjs
+npm install
 ```
+
+The harnesses look for them in `node_modules/` first and fall back to a local
+`.devtools/node_modules/`, so either layout works.
 
 `tests/engine.test.js` drives the real pipeline over synthetic images with
 known ground truth and scores the result with intersection-over-union. It runs

@@ -22,8 +22,25 @@ const fs = require('fs');
 const path = require('path');
 
 const ROOT = path.join(__dirname, '..');
-const { PNG } = require(path.join(ROOT, '.devtools', 'node_modules', 'pngjs'));
-const jpeg = require(path.join(ROOT, '.devtools', 'node_modules', 'jpeg-js'));
+
+/**
+ * Loads a development dependency.
+ *
+ * They live in `.devtools/` on the machine this was written on, but a fresh
+ * clone installs them into `node_modules/` with a plain `npm install`. Try
+ * both so the tool works either way.
+ */
+function devDependency(name) {
+	try {
+		return require(path.join(ROOT, '.devtools', 'node_modules', name));
+	} catch (err) {
+		if (err.code !== 'MODULE_NOT_FOUND') throw err;
+	}
+	return require(name);
+}
+
+const { PNG } = devDependency('pngjs');
+const jpeg = devDependency('jpeg-js');
 
 /* ----------------------------- canvas shim ------------------------------ */
 

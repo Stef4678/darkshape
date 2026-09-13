@@ -27,15 +27,23 @@ const path = require('path');
 const os = require('os');
 
 const ROOT = path.join(__dirname, '..');
-const JSDOM_PATH = path.join(ROOT, '.devtools', 'node_modules', 'jsdom');
 
+/**
+ * Loads jsdom from wherever it was installed. A fresh clone puts it in
+ * `node_modules/` via `npm install`; the machine this was written on keeps it
+ * in `.devtools/`. Try both.
+ */
 let JSDOM, VirtualConsole;
 try {
-	({ JSDOM, VirtualConsole } = require(JSDOM_PATH));
+	({ JSDOM, VirtualConsole } = require(path.join(ROOT, '.devtools', 'node_modules', 'jsdom')));
 } catch (err) {
-	console.log('\u2717 jsdom is not installed.');
-	console.log('  run:  npm install --cache .\\.npm-cache --prefix .\\.devtools jsdom');
-	process.exit(1);
+	try {
+		({ JSDOM, VirtualConsole } = require('jsdom'));
+	} catch (err2) {
+		console.log('\u2717 jsdom is not installed.');
+		console.log('  run:  npm install');
+		process.exit(1);
+	}
 }
 
 const JS_FILES = ['js/engine.js', 'js/bridge.js', 'js/app.js'];
