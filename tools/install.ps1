@@ -21,6 +21,23 @@ if (-not (Test-Path $pluginsDir)) {
 $target = Join-Path $pluginsDir $manifest.id
 $runtime = @('manifest.json', 'logo.png', 'index.html', 'css', 'js')
 
+# The plugin id became a UUID, which Eagle requires for a packaged install, and
+# Eagle uses the id as the install folder name. An install made before that
+# change sits under the old name, and leaving it would give Eagle two copies of
+# one plugin.
+$legacy = Join-Path $pluginsDir 'darkshape-silhouette-studio'
+if ((Test-Path $legacy) -and ($legacy -ne $target)) {
+	$legacyManifest = Join-Path $legacy 'manifest.json'
+	$isOurs = (Test-Path $legacyManifest) -and `
+		((Get-Content $legacyManifest -Raw | ConvertFrom-Json).name -eq $manifest.name)
+	if ($isOurs) {
+		Write-Host "removing the pre-UUID install: $legacy"
+		Remove-Item -Recurse -Force $legacy
+	} else {
+		Write-Host "note: $legacy exists but is not $($manifest.name); leaving it alone"
+	}
+}
+
 if (Test-Path $target) {
 	Write-Host "removing previous install: $target"
 	Remove-Item -Recurse -Force $target

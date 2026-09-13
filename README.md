@@ -103,13 +103,17 @@ Windows-only. On macOS, install by hand — see below.
 
 ### From the release — easiest
 
-1. Download the latest **`darkshape-<version>.zip`** from
+1. Download **`Darkshape-<version>.eagleplugin`** from
    [Releases](https://github.com/Stef4678/darkshape/releases/latest).
-2. Extract the `darkshape-silhouette-studio` folder from it into Eagle's plugin
-   folder — see the table below.
+2. Install that package in Eagle, or — to place it by hand — unzip it into a
+   folder inside Eagle's plugin directory. Name the folder after the `id` in
+   `manifest.json`; Eagle uses the id as the install folder name.
 3. Restart Eagle, so it rescans its plugin directory.
 
 The plugin appears in Eagle's plugin list as **Darkshape**.
+
+A `.eagleplugin` is an ordinary ZIP. Unzip it and you should see `manifest.json`
+at the top level, alongside `index.html`, `logo.png`, `css/` and `js/`.
 
 ### From source
 
@@ -123,11 +127,10 @@ pwsh -File tools/install.ps1
 
 Or download the repository as a ZIP and run the same script from the unpacked
 folder. The script copies only the runtime files into
-`%APPDATA%\Eagle\Plugins\darkshape-silhouette-studio\`.
+`%APPDATA%\Eagle\Plugins\<plugin id>\`.
 
-**Installing by hand** — on any platform, create a folder called
-`darkshape-silhouette-studio` inside Eagle's plugin directory and copy these
-into it:
+**Installing by hand** — on any platform, create a folder inside Eagle's plugin
+directory and copy these into it:
 
 ```
 manifest.json
@@ -148,8 +151,26 @@ I have only been able to test the Windows path, so if the macOS folder is
 somewhere else, Eagle's own article above is the authority.
 
 `manifest.json` must sit at the top level of that folder, not inside a nested
-one. The `tools/`, `tests/` and `assets/` folders are development files and are
-not needed to run the plugin.
+one. The `tools/`, `tests/`, `assets/` and `dist/` folders are development
+files and are not needed to run the plugin.
+
+### The packaged plugin
+
+`dist/Darkshape-<version>.eagleplugin` is the packaged plugin — the file Eagle
+expects for installation from a package, and the file to upload when submitting
+to the Eagle Plugin Center. It is committed to the repository and attached to
+each release, and it is rebuilt with:
+
+```
+npm run package
+```
+
+Do not use Eagle's own **Pack Plugin** on this project. It zips the whole
+registered folder, which here means 47 MB of `.git`, `.devtools` and
+`.npm-cache` would be swept into the submission — and Eagle's
+[package contents criteria](https://developer.eagle.cool/plugin-api/plugin-review/criteria/package-contents.md)
+reject development artifacts. `tools/package.ps1` packages only the runtime
+files and prints what it left behind, so the difference is never a mystery.
 
 ---
 
@@ -428,6 +449,7 @@ darkshape/
 │   ├── bridge.js          every Eagle API call, each with a fallback
 │   └── app.js             interface state, preview, batch runner
 ├── tools/
+│   ├── package.ps1        builds dist/Darkshape-<version>.eagleplugin
 │   ├── install.ps1        copies the runtime files into Eagle (Windows)
 │   ├── render.js          render an image from the command line, no Eagle needed
 │   └── make-logo.ps1      regenerates logo.png
@@ -435,6 +457,7 @@ darkshape/
 │   ├── engine.test.js     the algorithm, against synthetic images with known truth
 │   └── dom-smoke.js       the interface, in jsdom, against a mocked Eagle host
 ├── assets/                screenshots used by this README
+├── dist/                  the packaged plugin, built by tools/package.ps1
 ├── package.json           dev dependencies and scripts
 └── LICENSE                MIT
 ```
@@ -551,6 +574,7 @@ npm run test:ui       # interface + Eagle integration, jsdom
 npm run render        # render an image from the command line
 npm run logo          # regenerate logo.png
 npm run install-plugin
+npm run package       # build dist/Darkshape-<version>.eagleplugin
 ```
 
 To see a render without opening Eagle, run an image through the engine:
@@ -588,8 +612,9 @@ and regression tests for the activation race and the export filename collision.
 ## Troubleshooting
 
 **The plugin does not appear in Eagle.** Restart Eagle after installing, so it
-rescans its plugin folder. Check that `manifest.json` is at the top level of
-`Eagle/Plugins/darkshape-silhouette-studio/` and not inside a nested folder.
+rescans its plugin folder. Check that `manifest.json` is at the top level of the
+plugin's folder inside `Eagle/Plugins/` and not inside a nested one. The folder
+is named after the plugin's `id`, which is a UUID.
 
 **"Nothing selected".** Darkshape works from Eagle's current selection. Select
 one or more images in the library first, or drop image files onto the plugin

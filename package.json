@@ -1,37 +1,24 @@
 {
-	"name": "darkshape",
-	"version": "1.19.0",
-	"private": true,
-	"description": "Eagle plugin that turns photos into clean silhouettes, single or batch.",
-	"license": "MIT",
-	"scripts": {
-		"test": "node tests/engine.test.js && node tests/dom-smoke.js",
-		"test:engine": "node tests/engine.test.js",
-		"test:ui": "node tests/dom-smoke.js",
-		"render": "node tools/render.js",
-		"logo": "pwsh -File tools/make-logo.ps1",
-		"install-plugin": "pwsh -File tools/install.ps1"
-	},
-	"devDependencies": {
-		"jsdom": "^30.0.0",
-		"jpeg-js": "^0.4.4",
-		"pngjs": "^7.0.0"
-	},
-	"engines": {
-		"node": ">=18"
-	}
+  "name": "darkshape",
+  "version": "1.20.0",
+  "private": true,
+  "description": "Eagle plugin that turns photos into clean silhouettes, single or batch.",
+  "license": "MIT",
+  "scripts": {
+    "test": "node tests/engine.test.js && node tests/dom-smoke.js",
+    "test:engine": "node tests/engine.test.js",
+    "test:ui": "node tests/dom-smoke.js",
+    "render": "node tools/render.js",
+    "logo": "pwsh -File tools/make-logo.ps1",
+    "install-plugin": "pwsh -File tools/install.ps1",
+    "package": "pwsh -File tools/package.ps1"
+  },
+  "devDependencies": {
+    "jsdom": "^30.0.0",
+    "jpeg-js": "^0.4.4",
+    "pngjs": "^7.0.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
