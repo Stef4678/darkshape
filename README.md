@@ -530,11 +530,18 @@ npm install           # jsdom, pngjs and jpeg-js — dev dependencies only
 npm test              # both suites
 npm run test:engine   # silhouette algorithm, no DOM required
 npm run test:ui       # interface + Eagle integration, jsdom
+npm run counts        # check the assertion count below still matches the suites
+npm run counts:fix    # update that count after adding tests
 npm run render        # render an image from the command line
 npm run logo          # regenerate logo.png
 npm run install-plugin
 npm run package       # build dist/Darkshape-<version>.eagleplugin
 ```
+
+`npm run package` runs the suite and checks the assertion count below before it
+builds, so a release cannot be cut from a tree whose documentation misstates
+what the tests cover. Add tests, run `npm run counts:fix`, and the number stays
+honest without anyone having to remember it.
 
 To see a render without opening Eagle, run an image through the engine:
 

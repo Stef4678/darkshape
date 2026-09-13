@@ -8,6 +8,8 @@
     "test": "node tests/engine.test.js && node tests/dom-smoke.js",
     "test:engine": "node tests/engine.test.js",
     "test:ui": "node tests/dom-smoke.js",
+    "counts": "pwsh -File tools/check-counts.ps1",
+    "counts:fix": "pwsh -File tools/check-counts.ps1 -Fix",
     "render": "node tools/render.js",
     "logo": "pwsh -File tools/make-logo.ps1",
     "install-plugin": "pwsh -File tools/install.ps1",

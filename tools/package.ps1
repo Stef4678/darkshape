@@ -53,6 +53,15 @@ if ($baked.Groups[1].Value -ne $manifest.version) {
 }
 Write-Output "version: manifest and js/engine.js agree ($($manifest.version))"
 
+# The README quotes an assertion count, and a count only ever goes stale in one
+# direction. Checking it here means a release cannot be built from a tree whose
+# documentation misstates what the suite covers.
+& (Join-Path $PSScriptRoot 'check-counts.ps1') | ForEach-Object { Write-Output "  $_" }
+if ($LASTEXITCODE -ne 0) {
+    throw "the assertion count in README.md is stale - run: pwsh -File tools/check-counts.ps1 -Fix"
+}
+Write-Output "version: manifest and js/engine.js agree ($($manifest.version))"
+
 # ------------------------------------------------------- folder hygiene check
 function Get-TreeSize($path) {
     if (-not (Test-Path $path)) { return 0 }
@@ -110,13 +119,32 @@ if (Test-Path $package) { Remove-Item $package -Force }
 # Entry names must use forward slashes, which is what Eagle's own Pack Plugin
 # produces. ZipFile::CreateFromDirectory emits backslashes on Windows, which
 # other extractors can mishandle.
+#
+# Entry timestamps are pinned to a constant. Left alone they come from each
+# source file's last-write time, so merely touching a file - with no change to
+# a single byte of its content - produced a different package. Since dist/ is
+# committed, that made every build show up as a modification and left no way to
+# tell a genuine rebuild from noise.
+$fixedTime = [datetime]::new(1980, 1, 1, 0, 0, 0, [DateTimeKind]::Utc)
+
 $zip = [System.IO.Compression.ZipFile]::Open($package, 'Create')
 try {
     foreach ($file in Get-ChildItem $stage -Recurse -File | Sort-Object FullName) {
         $rel = $file.FullName.Substring($stage.Length + 1) -replace '\\', '/'
-        [System.IO.Compression.ZipFileExtensions]::CreateEntryFromFile(
-            $zip, $file.FullName, $rel,
-            [System.IO.Compression.CompressionLevel]::Optimal) | Out-Null
+
+        # CreateEntryFromFile leaves the entry open for writing, and the
+        # timestamp can only be set before that. So the entry is created by
+        # hand, stamped, and then filled.
+        $entry = $zip.CreateEntry($rel, [System.IO.Compression.CompressionLevel]::Optimal)
+        $entry.LastWriteTime = $fixedTime
+
+        $bytes = [System.IO.File]::ReadAllBytes($file.FullName)
+        $stream = $entry.Open()
+        try {
+            $stream.Write($bytes, 0, $bytes.Length)
+        } finally {
+            $stream.Dispose()
+        }
     }
 } finally {
     $zip.Dispose()
