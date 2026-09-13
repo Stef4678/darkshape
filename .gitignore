@@ -1,0 +1,17 @@
+# Development dependencies, installed locally from package.json.
+# The plugin itself ships none of these — Eagle runs the four files in js/
+# and css/ directly.
+.devtools/
+.npm-cache/
+node_modules/
+
+# Scratch space used while measuring engine behaviour. Recreated as needed.
+.diag/
+
+# Editor and OS noise
+.vscode/
+.idea/
+*.log
+Thumbs.db
+desktop.ini
+.DS_Store

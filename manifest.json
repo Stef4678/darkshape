@@ -1,0 +1,53 @@
+{
+	"id": "darkshape-silhouette-studio",
+	"version": "1.17.0",
+	"platform": "all",
+	"arch": "all",
+	"name": "Darkshape",
+	"description": "Turn photos into clean silhouettes and luminous glowing forms — one image at a time, or an entire selection as a batch.",
+	"logo": "/logo.png",
+	"keywords": [
+		"silhouette",
+		"cutout",
+		"background removal",
+		"stencil",
+		"shadow",
+		"shape",
+		"mask",
+		"luminous",
+		"glow",
+		"bloom",
+		"backdrop",
+		"batch"
+	],
+	"devTools": false,
+	"main": {
+		"url": "index.html",
+		"width": 1240,
+		"height": 840,
+		"minWidth": 960,
+		"minHeight": 640,
+		"frame": false,
+		"backgroundColor": "#0a0b10",
+		"resizable": true,
+		"minimizable": true,
+		"maximizable": true,
+		"fullscreenable": true,
+		"multiple": false,
+		"runAfterInstall": false
+	}
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+

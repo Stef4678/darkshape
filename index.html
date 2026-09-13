@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+	<meta charset="UTF-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+	<title>Darkshape — Silhouette Studio</title>
+	<link rel="stylesheet" href="css/style.css" />
+</head>
+
+<body data-theme="dark">
+	<!-- ============================ Title bar ============================ -->
+	<header class="titlebar">
+		<div class="brand">
+			<img class="brand-logo" src="logo.png" alt="" draggable="false" />
+			<div class="brand-text">
+				<span class="brand-name">Darkshape</span>
+				<span class="brand-sub">Silhouette Studio <span class="brand-version" id="brandVersion"></span></span>
+			</div>
+		</div>
+
+		<div class="titlebar-drag"></div>
+
+		<div class="titlebar-meta">
+			<span class="chip" id="chipLibrary" title="Active Eagle library">
+				<svg viewBox="0 0 24 24" class="ico"><path d="M3 5.5A2.5 2.5 0 0 1 5.5 3H9v18H5.5A2.5 2.5 0 0 1 3 18.5v-13Z" /><path d="M11 3h7.5A2.5 2.5 0 0 1 21 5.5v13a2.5 2.5 0 0 1-2.5 2.5H11V3Z" opacity=".45" /></svg>
+				<span id="libraryName">Library</span>
+			</span>
+		</div>
+
+		<div class="window-controls">
+			<button class="win-btn" id="btnMinimize" type="button" title="Minimise" aria-label="Minimise">
+				<svg viewBox="0 0 12 12"><path d="M2.5 6h7" /></svg>
+			</button>
+			<button class="win-btn" id="btnMaximize" type="button" title="Maximise" aria-label="Maximise">
+				<svg viewBox="0 0 12 12"><rect x="2.75" y="2.75" width="6.5" height="6.5" rx="1.25" /></svg>
+			</button>
+			<button class="win-btn win-btn-close" id="btnClose" type="button" title="Close" aria-label="Close">
+				<svg viewBox="0 0 12 12"><path d="M3.2 3.2l5.6 5.6M8.8 3.2l-5.6 5.6" /></svg>
+			</button>
+		</div>
+	</header>
+
+	<main class="workspace">
+		<!-- ============================ Sidebar ============================ -->
+		<aside class="sidebar" id="sidebar">
+			<section class="panel" data-group="detection">
+				<header class="panel-head">
+					<h2>Detection</h2>
+					<span class="panel-hint">How the subject is separated</span>
+				</header>
+
+				<div class="field field-inline">
+					<div class="switch-text">
+						<span class="field-label">Auto-tune each image</span>
+						<span class="field-help">Reads the photo and chooses the method, the stray-object rule and the gap filling itself. Touching any of those controls takes over from it.</span>
+					</div>
+					<button type="button" class="switch is-on" id="swAutoTune" role="switch" aria-checked="true"><span></span></button>
+				</div>
+				<p class="field-note field-note-wide" id="noteAutoTune"></p>
+
+				<div class="hint-card is-warning" id="weakHint" hidden>
+					<p class="hint-text" id="noteWeak"></p>
+				</div>
+
+				<div class="field">
+					<label class="field-label">Mode</label>
+					<div class="segmented" id="segMode" role="radiogroup">
+						<button type="button" data-value="auto" role="radio" class="is-active">Auto</button>
+						<button type="button" data-value="background" role="radio">Background</button>
+						<button type="button" data-value="luminance" role="radio">Contrast</button>
+						<button type="button" data-value="alpha" role="radio">Alpha</button>
+					</div>
+					<p class="field-help" id="helpMode">Picks alpha for cut-out PNGs, otherwise models the background.</p>
+				</div>
+
+				<div class="hint-card" id="backdropHint" hidden>
+					<p class="hint-text" id="noteBackdrop"></p>
+					<button type="button" class="mini-btn" id="btnTryContrast">Switch to Contrast</button>
+				</div>
+
+				<div class="field" data-when="background">
+					<div class="field-row">
+						<label class="field-label" for="rangeTolerance">Tolerance</label>
+						<output class="field-value" id="outTolerance">32</output>
+					</div>
+					<input type="range" id="rangeTolerance" min="0" max="100" step="1" value="32" />
+					<p class="field-help">Raise it until the backdrop disappears. Lower it if the subject erodes.</p>
+				</div>
+
+				<div class="field" data-when="luminance" hidden>
+					<div class="field-row">
+						<label class="field-label" for="rangeThreshold">Brightness split</label>
+						<div class="field-value-group">
+							<output class="field-value" id="outThreshold">Auto</output>
+							<button type="button" class="mini-btn" id="btnAutoThreshold" title="Go back to the level chosen automatically">↺ Auto</button>
+						</div>
+					</div>
+					<input type="range" id="rangeThreshold" min="0" max="255" step="1" value="128" />
+					<p class="field-help">Move the slider to set the split yourself; <strong>↺ Auto</strong> returns it to the computed level.</p>
+					<div class="field">
+						<label class="field-label">Subject is</label>
+						<div class="segmented" id="segLumSubject">
+							<button type="button" data-value="dark" class="is-active">Darker</button>
+							<button type="button" data-value="light">Lighter</button>
+						</div>
+					</div>
+				</div>
+
+				<div class="field field-inline">
+					<div class="switch-text">
+						<span class="field-label">Invert shape</span>
+						<span class="field-help">Keep the background instead of the subject.</span>
+					</div>
+					<button type="button" class="switch" id="swInvert" role="switch" aria-checked="false"><span></span></button>
+				</div>
+			</section>
+
+			<section class="panel" data-group="refine">
+				<header class="panel-head">
+					<h2>Refine</h2>
+					<span class="panel-hint">Clean up the cut edge</span>
+				</header>
+
+				<div class="field">
+					<div class="field-row">
+						<label class="field-label" for="rangeSoftness">Edge softness</label>
+						<output class="field-value" id="outSoftness">3.0</output>
+					</div>
+					<input type="range" id="rangeSoftness" min="0" max="20" step="0.1" value="3" />
+					<p class="field-help">Smooths the contour, then re-sharpens the edge. Raise it to erase fur and fabric bumps.</p>
+					<p class="field-note" id="noteSoftness"></p>
+				</div>
+
+				<div class="field">
+					<div class="field-row">
+						<label class="field-label" for="rangeDespeckle">Drop specks</label>
+						<output class="field-value" id="outDespeckle">0.03%</output>
+					</div>
+					<input type="range" id="rangeDespeckle" min="0" max="100" step="1" value="6" />
+					<p class="field-help">Discards islands smaller than the given share of the frame.</p>
+					<p class="field-note" id="noteDespeckle"></p>
+				</div>
+
+				<div class="field">
+					<div class="field-row">
+						<label class="field-label" for="rangeFillHoles">Fill holes</label>
+						<output class="field-value" id="outFillHoles">5%</output>
+					</div>
+					<input type="range" id="rangeFillHoles" min="0" max="10" step="0.5" value="5" />
+					<p class="field-help">Closes enclosed gaps, e.g. the space inside a handle.</p>
+					<p class="field-note" id="noteFillHoles"></p>
+				</div>
+
+				<div class="field field-inline">
+					<div class="switch-text">
+						<span class="field-label">Largest island only</span>
+						<span class="field-help">Keep a single subject and discard the rest.</span>
+					</div>
+					<button type="button" class="switch" id="swLargest" role="switch" aria-checked="false"><span></span></button>
+				</div>
+				<p class="field-note field-note-wide" id="noteLargest"></p>
+			</section>
+
+			<section class="panel" data-group="style">
+				<header class="panel-head">
+					<h2>Style</h2>
+					<span class="panel-hint">Colour, backdrop and edge light</span>
+				</header>
+
+				<div class="field">
+					<label class="field-label">Look</label>
+					<div class="presets" id="presetRow"></div>
+					<p class="field-help">Sets silhouette, backdrop and rim light together.</p>
+				</div>
+
+				<div class="field">
+					<label class="field-label">Shape</label>
+					<div class="segmented" id="segStyle">
+						<button type="button" data-value="solid" class="is-active">Solid</button>
+						<button type="button" data-value="outline">Outline</button>
+						<button type="button" data-value="luminous">Luminous</button>
+					</div>
+					<p class="field-help">Luminous renders the subject as a glowing form, keeping soft wisps and internal detail through a feathered edge.</p>
+				</div>
+
+				<div class="field" id="fieldGlowContrast" hidden>
+					<div class="field-row">
+						<label class="field-label" for="rangeGlowContrast">Glow contrast</label>
+						<output class="field-value" id="outGlowContrast">45%</output>
+					</div>
+					<input type="range" id="rangeGlowContrast" min="0" max="100" step="1" value="45" />
+					<p class="field-help">Pushes the form towards pure white. At 0 the source keeps its own brightness.</p>
+				</div>
+
+				<div class="field">
+					<label class="field-label">Silhouette colour</label>
+					<div class="swatches" id="swatchesFill"></div>
+				</div>
+
+				<div class="field">
+					<label class="field-label">Background</label>
+					<div class="segmented" id="segBackground">
+						<button type="button" data-value="transparent" class="is-active">None</button>
+						<button type="button" data-value="color">Colour</button>
+						<button type="button" data-value="scene">Scene</button>
+					</div>
+					<div class="swatches" id="swatchesBackground" hidden></div>
+					<div class="scenes" id="sceneGrid" hidden></div>
+				</div>
+			</section>
+
+			<section class="panel" data-group="rim">
+				<header class="panel-head">
+					<h2>Rim light</h2>
+					<span class="panel-hint">Backlight the profile</span>
+				</header>
+
+				<div class="field field-inline">
+					<div class="switch-text">
+						<span class="field-label">Rim light</span>
+						<span class="field-help">Glow hugging the edge, brightest on the lit side.</span>
+					</div>
+					<button type="button" class="switch" id="swRim" role="switch" aria-checked="false"><span></span></button>
+				</div>
+
+				<div id="rimOptions" hidden>
+					<div class="field">
+						<div class="field-row">
+							<label class="field-label" for="rangeRimIntensity">Intensity</label>
+							<output class="field-value" id="outRimIntensity">55%</output>
+						</div>
+						<input type="range" id="rangeRimIntensity" min="0" max="100" step="1" value="55" />
+					</div>
+
+					<div class="field">
+						<div class="field-row">
+							<label class="field-label" for="rangeRimWidth">Width</label>
+							<output class="field-value" id="outRimWidth">9</output>
+						</div>
+						<input type="range" id="rangeRimWidth" min="1" max="30" step="1" value="9" />
+					</div>
+
+					<div class="field">
+						<label class="field-label">Light colour</label>
+						<div class="swatches" id="swatchesRim"></div>
+					</div>
+
+					<div class="field">
+						<label class="field-label">Light direction</label>
+						<div class="compass" id="compass">
+							<button type="button" data-dir="top-left" style="--rot:-45deg" title="From the top left" aria-label="From the top left">
+								<svg viewBox="0 0 24 24"><path d="M12 19V5M6.5 10.5 12 5l5.5 5.5" /></svg>
+							</button>
+							<button type="button" data-dir="top" style="--rot:0deg" title="From above" aria-label="From above">
+								<svg viewBox="0 0 24 24"><path d="M12 19V5M6.5 10.5 12 5l5.5 5.5" /></svg>
+							</button>
+							<button type="button" data-dir="top-right" style="--rot:45deg" title="From the top right" aria-label="From the top right">
+								<svg viewBox="0 0 24 24"><path d="M12 19V5M6.5 10.5 12 5l5.5 5.5" /></svg>
+							</button>
+							<button type="button" data-dir="left" style="--rot:-90deg" title="From the left" aria-label="From the left">
+								<svg viewBox="0 0 24 24"><path d="M12 19V5M6.5 10.5 12 5l5.5 5.5" /></svg>
+							</button>
+							<button type="button" data-dir="all" class="compass-center" title="Evenly all around" aria-label="Evenly all around">
+								<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4.5" /></svg>
+							</button>
+							<button type="button" data-dir="right" style="--rot:90deg" title="From the right" aria-label="From the right">
+								<svg viewBox="0 0 24 24"><path d="M12 19V5M6.5 10.5 12 5l5.5 5.5" /></svg>
+							</button>
+							<button type="button" data-dir="bottom-left" style="--rot:-135deg" title="From the bottom left" aria-label="From the bottom left">
+								<svg viewBox="0 0 24 24"><path d="M12 19V5M6.5 10.5 12 5l5.5 5.5" /></svg>
+							</button>
+							<button type="button" data-dir="bottom" style="--rot:180deg" title="From below" aria-label="From below">
+								<svg viewBox="0 0 24 24"><path d="M12 19V5M6.5 10.5 12 5l5.5 5.5" /></svg>
+							</button>
+							<button type="button" data-dir="bottom-right" style="--rot:135deg" title="From the bottom right" aria-label="From the bottom right">
+								<svg viewBox="0 0 24 24"><path d="M12 19V5M6.5 10.5 12 5l5.5 5.5" /></svg>
+							</button>
+						</div>
+						<p class="field-help">The centre glows evenly; the arrows place the light.</p>
+					</div>
+				</div>
+			</section>
+
+			<section class="panel" data-group="output">
+				<header class="panel-head">
+					<h2>Output</h2>
+					<span class="panel-hint">Where the silhouettes go</span>
+				</header>
+
+				<div class="field field-inline">
+					<div class="switch-text">
+						<span class="field-label">Trim to shape</span>
+						<span class="field-help">Crop the canvas to the silhouette bounds.</span>
+					</div>
+					<button type="button" class="switch" id="swTrim" role="switch" aria-checked="false"><span></span></button>
+				</div>
+
+				<div class="field" id="fieldPadding" hidden>
+					<div class="field-row">
+						<label class="field-label" for="rangePadding">Padding</label>
+						<output class="field-value" id="outPadding">6%</output>
+					</div>
+					<input type="range" id="rangePadding" min="0" max="30" step="1" value="6" />
+				</div>
+
+				<div class="field">
+					<label class="field-label" for="inputSuffix">Name suffix</label>
+					<input type="text" class="text-input" id="inputSuffix" value="_silhouette" spellcheck="false" />
+				</div>
+
+				<div class="field">
+					<label class="field-label" for="selectFolder">Save into</label>
+					<select class="text-input select-input" id="selectFolder">
+						<option value="same">Same folder as the original</option>
+						<option value="root">Library root</option>
+					</select>
+				</div>
+
+				<div class="field">
+					<label class="field-label" for="inputTags">Tags</label>
+					<input type="text" class="text-input" id="inputTags" placeholder="silhouette, stencil" spellcheck="false" />
+				</div>
+
+				<div class="field field-inline">
+					<div class="switch-text">
+						<span class="field-label">Select new items</span>
+						<span class="field-help">Highlight the results in Eagle when finished.</span>
+					</div>
+					<button type="button" class="switch is-on" id="swSelect" role="switch" aria-checked="true"><span></span></button>
+				</div>
+			</section>
+
+			<div class="sidebar-foot">
+				<button type="button" class="ghost-btn" id="btnReset">Reset settings</button>
+			</div>
+		</aside>
+
+		<!-- ============================= Stage ============================= -->
+		<section class="stage-column">
+			<div class="stage" id="stage">
+				<div class="stage-inner" id="stageInner" hidden>
+					<div class="canvas-stack" id="canvasStack">
+						<canvas id="canvasOriginal"></canvas>
+						<div class="result-layer" id="resultLayer">
+							<canvas id="canvasResult"></canvas>
+						</div>
+						<div class="split-handle" id="splitHandle">
+							<span class="split-line"></span>
+							<span class="split-grip">
+								<svg viewBox="0 0 24 24"><path d="M9 7 5 12l4 5M15 7l4 5-4 5" /></svg>
+							</span>
+						</div>
+					</div>
+					<div class="stage-tag stage-tag-left" id="tagOriginal">Original</div>
+					<div class="stage-tag stage-tag-right" id="tagResult">Silhouette</div>
+				</div>
+
+				<div class="stage-empty" id="stageEmpty">
+					<div class="empty-art">
+						<svg viewBox="0 0 96 96" aria-hidden="true">
+							<circle cx="48" cy="30" r="15" />
+							<path d="M14 88c0-19 15-31 34-31s34 12 34 31Z" />
+						</svg>
+					</div>
+					<h3 id="emptyTitle">Select images in Eagle</h3>
+					<p id="emptyBody">Choose one photo for a single silhouette, or several for a batch run. You can also drop image files here.</p>
+					<div class="empty-actions">
+						<button type="button" class="ghost-btn" id="btnReload">
+							<svg viewBox="0 0 24 24" class="ico"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 5v6h-6" /></svg>
+							Load selected items
+						</button>
+						<button type="button" class="ghost-btn" id="btnPickFiles">
+							<svg viewBox="0 0 24 24" class="ico"><path d="M4 7.5A2.5 2.5 0 0 1 6.5 5h3l2 2.5h6A2.5 2.5 0 0 1 20 10v6.5a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 4 16.5v-9Z" /></svg>
+							Browse files
+						</button>
+					</div>
+				</div>
+
+				<div class="stage-toolbar">
+					<div class="toolbar-group segmented segmented-sm" id="segView">
+						<button type="button" data-value="split" class="is-active" title="Split comparison">Split</button>
+						<button type="button" data-value="result" title="Result only">Result</button>
+						<button type="button" data-value="original" title="Original only">Original</button>
+					</div>
+					<div class="toolbar-group">
+						<button type="button" class="icon-btn" id="btnZoomOut" title="Zoom out">
+							<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5" /><path d="M8.5 11h5M16 16l4 4" /></svg>
+						</button>
+						<output class="zoom-value" id="outZoom">Fit</output>
+						<button type="button" class="icon-btn" id="btnZoomIn" title="Zoom in">
+							<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5" /><path d="M8.5 11h5M11 8.5v5M16 16l4 4" /></svg>
+						</button>
+						<button type="button" class="icon-btn" id="btnZoomFit" title="Fit to view">
+							<svg viewBox="0 0 24 24"><path d="M4 9V5.5A1.5 1.5 0 0 1 5.5 4H9M15 4h3.5A1.5 1.5 0 0 1 20 5.5V9M20 15v3.5a1.5 1.5 0 0 1-1.5 1.5H15M9 20H5.5A1.5 1.5 0 0 1 4 18.5V15" /></svg>
+						</button>
+						<button type="button" class="icon-btn" id="btnCompare" title="Hold to see the original">
+							<svg viewBox="0 0 24 24"><path d="M12 4v16M5 6h6v12H5zM13 6h6v12h-6z" /></svg>
+						</button>
+					</div>
+					<div class="toolbar-spacer"></div>
+					<div class="toolbar-group">
+						<button type="button" class="ghost-btn ghost-btn-sm" id="btnExportFolder" title="Also write PNG files to a folder">
+							<svg viewBox="0 0 24 24" class="ico"><path d="M12 15V4M8.5 11.5 12 15l3.5-3.5M5 17v2.5A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5V17" /></svg>
+							Export PNG
+						</button>
+					</div>
+				</div>
+
+				<div class="drop-veil" id="dropVeil">
+					<svg viewBox="0 0 24 24"><path d="M12 16V5M8 9l4-4 4 4M5 17v2a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-2" /></svg>
+					<span>Drop images to add them</span>
+				</div>
+			</div>
+
+			<!-- ============================ Queue ============================ -->
+			<div class="queue" id="queue">
+				<div class="queue-head">
+					<span class="queue-title" id="queueTitle">Queue</span>
+					<span class="queue-warn" id="queueWarn" hidden></span>
+					<span class="queue-count" id="queueCount">0 images</span>
+				</div>
+				<div class="queue-list" id="queueList"></div>
+			</div>
+
+			<!-- ========================== Action bar ========================== -->
+			<footer class="actionbar">
+				<div class="action-status">
+					<span class="status-dot" id="statusDot"></span>
+					<div class="status-text">
+						<span class="status-title" id="statusTitle">Ready</span>
+						<span class="status-detail" id="statusDetail">Select images in Eagle to begin.</span>
+					</div>
+				</div>
+				<div class="action-buttons">
+					<button type="button" class="ghost-btn" id="btnReloadSelection" title="Re-read whatever is selected in Eagle right now">
+						<svg viewBox="0 0 24 24" class="ico"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 5v6h-6" /></svg>
+						Reload selection
+					</button>
+					<button type="button" class="primary-btn" id="btnRun" disabled>
+						<span class="primary-label" id="runLabel">Create silhouette</span>
+						<svg viewBox="0 0 24 24" class="ico"><path d="M5 12h13M13 6.5 18.5 12 13 17.5" /></svg>
+					</button>
+				</div>
+				<div class="progress-track" id="progressTrack" hidden>
+					<div class="progress-bar" id="progressBar"></div>
+				</div>
+			</footer>
+		</section>
+	</main>
+
+	<div class="toast-stack" id="toastStack"></div>
+
+	<script src="js/engine.js"></script>
+	<script src="js/bridge.js"></script>
+	<script src="js/app.js"></script>
+</body>
+
+</html>
+

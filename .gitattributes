@@ -1,0 +1,10 @@
+# Keep line endings identical for everyone; the plugin is plain text and
+# runs from source with no build step.
+* text=auto eol=lf
+
+# Binary assets
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.gif binary
