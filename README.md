@@ -101,6 +101,18 @@ Windows-only. On macOS, install by hand — see below.
 
 ## Installation
 
+### From the release — easiest
+
+1. Download the latest **`darkshape-<version>.zip`** from
+   [Releases](https://github.com/Stef4678/darkshape/releases/latest).
+2. Extract the `darkshape-silhouette-studio` folder from it into Eagle's plugin
+   folder — see the table below.
+3. Restart Eagle, so it rescans its plugin directory.
+
+The plugin appears in Eagle's plugin list as **Darkshape**.
+
+### From source
+
 Eagle plugins are just a folder, so installation is a clone and a copy:
 
 ```
@@ -110,12 +122,7 @@ pwsh -File tools/install.ps1
 ```
 
 Or download the repository as a ZIP and run the same script from the unpacked
-folder.
-
-Then restart Eagle so it rescans its plugin directory. The plugin appears in
-Eagle's plugin list as **Darkshape**.
-
-The script copies only the runtime files into
+folder. The script copies only the runtime files into
 `%APPDATA%\Eagle\Plugins\darkshape-silhouette-studio\`.
 
 **Installing by hand** — on any platform, create a folder called
