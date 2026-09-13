@@ -1052,10 +1052,25 @@
 		var i;
 
 		var mode = options.mode;
-		if (mode === 'auto') {
-			mode = hasMeaningfulAlpha(imageData) ? 'alpha' : 'background';
+		var alphaAvailable = null;
+
+		if (mode === 'auto' || mode === 'alpha') {
+			alphaAvailable = hasMeaningfulAlpha(imageData);
+
+			// 'auto' picks alpha only when there is one. An explicit request
+			// for alpha on a file that has none is not an error, but taking it
+			// literally would copy an all-opaque channel into the mask and
+			// make the entire frame the subject — a solid rectangle. Fall back
+			// to modelling the backdrop and say so through `stats` so the
+			// interface can explain the substitution.
+			mode = alphaAvailable ? 'alpha' : 'background';
 		}
-		if (stats) stats.mode = mode;
+
+		if (stats) {
+			stats.mode = mode;
+			stats.alphaRequested = options.mode === 'alpha';
+			stats.alphaAvailable = alphaAvailable;
+		}
 
 		if (mode === 'alpha') {
 			for (i = 0; i < n; i++) mask[i] = d[i * 4 + 3];
@@ -1345,14 +1360,13 @@
 
 	/**
 	 * A backdrop holding two well-separated colours — a cast shadow, a
-	 * graduated sweep, a wall plus a door frame — defeats background
-	 * modelling: the fill can neither remove the darker part without eating
-	 * the subject, nor leave it without ragged blobs. Measured on the border
-	 * ring alone, before any mask exists (see `backdropSpread`). Calibrated
-	 * against a reference set: an even backdrop measures about 0.05, a
-	 * shadowed one about 0.12 and up.
+	 * graduated sweep, a wall plus a door frame — used to be enough on its own
+	 * to send the tuner to Contrast. It is no longer a rule: methods are now
+	 * run and scored, which handles a backdrop with two *regions* (a white
+	 * wall above a blue sofa) as well as a graduated one. The measurement
+	 * survives as `backdropSpread` in the report, where the interface uses it
+	 * to suggest Contrast when someone is driving the controls by hand.
 	 */
-	var UNEVEN_BACKDROP = 0.09;
 
 	/** How far the detection level is nudged when testing a cut's stability. */
 	var TUNE_NUDGE = 10;
@@ -1381,6 +1395,25 @@
 
 	/** Below this the method found almost nothing and does not count. */
 	var MIN_SUBJECT_COVERAGE = 0.03;
+
+	/**
+	 * Purity low enough to condemn a cut on its own.
+	 *
+	 * The combined rule below needs *both* measurements to be poor, which
+	 * spares small subjects that move a lot under a nudge. But a mask made
+	 * almost entirely of backdrop colours is wrong however steady its
+	 * boundary — a brightness split that lands on the backdrop is perfectly
+	 * stable. Measured at 0.00 on a cut-out whose subject is cropped at the
+	 * frame, while a genuinely good mask with some backdrop-like fur sits at
+	 * 0.59, so the bar is well clear of false alarms.
+	 */
+	var PURITY_CONDEMNED = 0.2;
+
+	/** Whether a measured cut should be reported as untrustworthy. */
+	function isWeak(stability, purity) {
+		if (purity < PURITY_CONDEMNED) return true;
+		return stability < STABILITY_FLOOR && purity < PURITY_FLOOR;
+	}
 
 	/**
 	 * How far another method must beat background modelling before it is
@@ -1531,7 +1564,7 @@
 			stability: measured.stability,
 			purity: measured.purity,
 			coverage: measured.coverage,
-			weak: measured.stability < STABILITY_FLOOR && measured.purity < PURITY_FLOOR
+			weak: isWeak(measured.stability, measured.purity)
 		};
 	}
 
@@ -1582,6 +1615,44 @@
 		var spread = modelStats.backdropSpread || 0;
 		var backdropL = modelStats.backdropLuminance;
 		var subjectSide = (typeof backdropL === 'number' && backdropL < 0.5) ? 'light' : 'dark';
+
+		// A file that already carries its shape has nothing to detect. This is
+		// the route the plugin recommends for hard photographs — an AI cut-out
+		// brought in as a PNG — and thresholding it can only approximate what
+		// the file states exactly.
+		//
+		// It is also actively harmful, not merely redundant: when the subject
+		// is cropped at the frame, part of the border ring is the subject
+		// itself, so the backdrop model is built from the thing it is meant to
+		// remove. Measured on a cut-out whose subject runs off the top and
+		// bottom edges, the tuned mask agreed with the file's own alpha at
+		// 0.49; honouring the alpha agrees at 1.00.
+		if (hasMeaningfulAlpha(imageData)) {
+			var viaAlpha = measureCandidate(imageData, model, probe, { mode: 'alpha' }, total);
+			return {
+				mode: 'alpha',
+				luminanceThreshold: 'auto',
+				// The file is authoritative: do not drop islands or close gaps.
+				keepLargest: false,
+				fillHoles: 0,
+				report: {
+					mode: 'alpha',
+					subject: null,
+					backdropSpread: spread,
+					backdropLuminance: backdropL,
+					share: viaAlpha
+						? (viaAlpha.stats.largestIsland || 0) / Math.max(1, viaAlpha.stats.subjectPixels)
+						: 1,
+					islands: viaAlpha ? viaAlpha.stats.islands : 1,
+					coverage: viaAlpha ? viaAlpha.coverage : 0,
+					holePercent: 0,
+					stability: 1,
+					purity: 1,
+					candidates: 1,
+					weak: false
+				}
+			};
+		}
 
 		// Candidates are measured with the same routine that judges settings
 		// already in force, so the two can never drift apart.
@@ -1696,7 +1767,7 @@
 				// false alarms: a small subject moves a lot under a nudge while
 				// still being right, and a settled boundary can be settled on
 				// the wrong side of the split.
-				weak: stability < STABILITY_FLOOR && purity < PURITY_FLOOR
+				weak: isWeak(stability, purity)
 			}
 		};
 		if (chosen.mode === 'background') settings.tolerance = chosen.tolerance;
@@ -1721,7 +1792,7 @@
 		parseColor: parseColor,
 		SCENES: SCENES,
 		RIM_DIRECTIONS: RIM_DIRECTIONS,
-		VERSION: '1.17.0'
+		VERSION: '1.18.0'
 	};
 })(typeof window !== 'undefined' ? window : this);
 

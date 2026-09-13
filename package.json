@@ -1,6 +1,6 @@
 {
 	"name": "darkshape",
-	"version": "1.17.0",
+	"version": "1.18.0",
 	"private": true,
 	"description": "Eagle plugin that turns photos into clean silhouettes, single or batch.",
 	"license": "MIT",

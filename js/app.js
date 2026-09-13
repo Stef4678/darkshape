@@ -740,6 +740,36 @@
 	 */
 	var BACKDROP_SPREAD_HINT = 0.09;
 
+	/** What each detection mode does, shown under the Mode control. */
+	var MODE_HELP = {
+		auto: 'Picks alpha for cut-out PNGs, otherwise models the background.',
+		background: 'Models the colours around the border and floods inwards from the frame.',
+		luminance: 'Splits the image purely on brightness — ideal for high-contrast subjects.',
+		alpha: 'Uses the existing transparency of the file as the silhouette.'
+	};
+
+	/**
+	 * Says when the engine had to substitute a method.
+	 *
+	 * Asking for Alpha on a file with no transparency would copy an all-opaque
+	 * channel into the mask and fill the frame with a solid rectangle. The
+	 * engine models the backdrop instead, and this is where that gets
+	 * explained rather than passing off one method's work as another's.
+	 */
+	function updateModeHelp(result) {
+		var d = result && result.diagnostics;
+
+		if (d && d.alphaRequested && d.alphaAvailable === false) {
+			el.helpMode.textContent = 'This file has no transparency, so Alpha is not ' +
+				'available — modelling the backdrop instead.';
+			el.helpMode.dataset.state = 'active';
+			return;
+		}
+
+		delete el.helpMode.dataset.state;
+		el.helpMode.textContent = MODE_HELP[params.mode] || '';
+	}
+
 	function updateDetectionHint(result) {
 		// With auto-tune on the tuner has already weighed both methods and
 		// chosen; a suggestion on top would only contradict what is on screen.
@@ -848,9 +878,16 @@
 			el.weakHint.hidden = true;
 			return;
 		}
-		var why = report.mode === 'luminance'
-			? 'Reading this photo as Contrast — its backdrop holds more than one colour, which background modelling cannot follow.'
-			: 'Reading this photo as Background modelling — its backdrop is even.';
+		var why;
+		if (report.mode === 'alpha') {
+			why = 'Using this file\'s own alpha channel — it already carries its shape, ' +
+				'so nothing is thresholded.';
+		} else if (report.mode === 'luminance') {
+			why = 'Reading this photo as Contrast — its backdrop holds more than one ' +
+				'colour, which background modelling cannot follow.';
+		} else {
+			why = 'Reading this photo as Background modelling — its backdrop is even.';
+		}
 		el.noteAutoTune.textContent = why;
 		el.noteAutoTune.dataset.state = 'active';
 
@@ -895,7 +932,7 @@
 			luminance: 'Splits the image purely on brightness — ideal for high-contrast subjects.',
 			alpha: 'Uses the existing transparency of the file as the silhouette.'
 		};
-		el.helpMode.textContent = help[mode] || '';
+		el.helpMode.textContent = help[mode] || el.helpMode.textContent;
 
 		syncThresholdReadout(null);
 	}
@@ -1389,6 +1426,7 @@
 			updateRefineNotes(result);
 			updateDetectionHint(result);
 			syncThresholdReadout(result);
+			updateModeHelp(result);
 			var subjectLabel = state.items.length <= 1
 				? 'Single image'
 				: 'Image ' + (state.activeIndex + 1) + ' of ' + state.items.length;
@@ -1671,8 +1709,27 @@
 		el.runLabel.textContent = count > 1 ? 'Create ' + count + ' silhouettes' : 'Create silhouette';
 	}
 
-	async function run(options) {
-		var opts = options || {};
+	/**
+	 * Keeps two exports in one run from landing on the same path.
+	 *
+	 * Eagle allows the same filename in different folders, so a batch can
+	 * legitimately contain two entries called `IMG_0001.jpg`. Writing both to
+	 * `IMG_0001_silhouette.png` loses one of them silently. A repeated run
+	 * produces the same names as the run before it, so re-exporting still
+	 * replaces its own previous output rather than accumulating copies.
+	 */
+	function uniqueName(base, used) {
+		var candidate = base;
+		var n = 2;
+		while (used[candidate]) {
+			candidate = base + '-' + n;
+			n++;
+		}
+		used[candidate] = true;
+		return candidate;
+	}
+
+	async function run(options) {		var opts = options || {};
 		if (state.running || !state.items.length) return;
 
 		if (!Bridge.available() && !opts.toFolder) {
@@ -1695,6 +1752,10 @@
 		var started = performance.now();
 		var tags = parseTags(params.tags);
 		var targets = state.items.slice();
+		// Two sources can carry the same name — Eagle keeps folders for
+		// exactly that reason — and exporting both would otherwise write to
+		// one path, destroying the first while the run counted both.
+		var usedNames = Object.create(null);
 
 		// Reset statuses for this pass.
 		targets.forEach(function (entry) { entry.status = 'idle'; entry.message = ''; entry.resultId = null; });
@@ -1717,7 +1778,8 @@
 				var name = Bridge.sanitizeName(baseName(entry) + params.suffix);
 
 				if (opts.toFolder) {
-					var fullPath = await Bridge.saveCanvasToFolder(rendered.canvas, state.exportFolder, name);
+					var fullPath = await Bridge.saveCanvasToFolder(rendered.canvas, state.exportFolder,
+						uniqueName(name, usedNames));
 					entry.message = fullPath;
 				} else {
 					var id = await Bridge.addCanvasToLibrary(rendered.canvas, {

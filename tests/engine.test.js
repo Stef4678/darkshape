@@ -150,6 +150,41 @@ function ellipseTruth(w = W, h = H) {
 	return truth;
 }
 
+/* A subject taller than the frame, so it is cropped at the top and bottom and
+ * part of the border ring is the subject itself. */
+const CROP_RX = 70, CROP_RY = 120;
+
+function insideCropped(x, y) {
+	const dx = (x - CX) / CROP_RX;
+	const dy = (y - CY) / CROP_RY;
+	return dx * dx + dy * dy <= 1;
+}
+
+function croppedTruth(w = W, h = H) {
+	const truth = new Uint8ClampedArray(w * h);
+	for (let y = 0; y < h; y++) {
+		for (let x = 0; x < w; x++) truth[y * w + x] = insideCropped(x, y) ? 255 : 0;
+	}
+	return truth;
+}
+
+/**
+ * A pale subject on a pale warm backdrop with a real alpha channel — the case
+ * a threshold cannot solve and an AI cut-out can. The RGB left underneath the
+ * transparency is the original photograph.
+ */
+function croppedCutoutSource() {
+	const image = makeImage(W, H, (x, y) => {
+		const backdrop = 205 + Math.round(Math.sin(x * 0.05) * 8 + Math.cos(y * 0.04) * 6);
+		const subject = 222 + Math.round(Math.sin(x * 0.3) * 5);
+		const on = insideCropped(x, y);
+		return on ? [subject, subject, subject + 4, 255] : [backdrop, backdrop - 12, backdrop - 42, 0];
+	});
+	image.naturalWidth = W;
+	image.naturalHeight = H;
+	return image;
+}
+
 /* =============================== tests ================================== */
 
 section('1. Flat background, subject cut-out');
@@ -1072,8 +1107,67 @@ section('29. Settings are judged whoever chose them');
 		alpha.weak === false, 'purity ' + alpha.purity.toFixed(3));
 }
 
-/* -------------------------------- summary ------------------------------- */
+section('30. A file that carries its own shape is not thresholded');
+{
+	const cut = croppedCutoutSource();
+	const tuned = Engine.autoTune(cut, {});
+	check('auto-tune honours the alpha instead of thresholding',
+		tuned.mode === 'alpha', String(tuned.mode));
+	check('nothing is discarded or closed on an alpha cut-out',
+		tuned.keepLargest === false && tuned.fillHoles === 0,
+		'keepLargest=' + tuned.keepLargest + ' fillHoles=' + tuned.fillHoles);
+	check('an alpha cut-out is not reported as unreliable',
+		tuned.report.weak === false);
+	check('the report names the method it used',
+		tuned.report.mode === 'alpha', String(tuned.report.mode));
 
+	// The mask that comes out has to be the file's own alpha. Before this was
+	// handled, the cropped border built a backdrop model out of the subject
+	// and the cut agreed with the alpha at 0.49.
+	const applied = Engine.render(cut, Object.assign({}, BASE_OPTIONS, FLAT, {
+		mode: tuned.mode, keepLargest: tuned.keepLargest, fillHoles: tuned.fillHoles
+	}));
+	const agreement = iou(maskOf(applied), croppedTruth());
+	check('the rendered shape is the file\'s own alpha',
+		agreement > 0.99, agreement.toFixed(4));
+
+	// Asking for alpha on a file that has none used to copy an all-opaque
+	// channel into the mask and fill the entire frame with one solid shape.
+	const opaque = makeImage(W, H, (x, y) => (insideEllipse(x, y) ? [90, 95, 110] : [230, 232, 236]));
+	opaque.naturalWidth = W;
+	opaque.naturalHeight = H;
+	const stats = {};
+	const mask = Engine.computeMask(opaque, { mode: 'alpha', tolerance: 32 }, stats);
+	let covered = 0;
+	for (let i = 0; i < mask.length; i++) if (mask[i] > 127) covered++;
+	const coverage = covered / mask.length;
+
+	check('alpha requested on an opaque file falls back to modelling',
+		stats.mode === 'background', String(stats.mode));
+	check('the fallback records what was asked for and what was there',
+		stats.alphaRequested === true && stats.alphaAvailable === false,
+		'requested=' + stats.alphaRequested + ' available=' + stats.alphaAvailable);
+	check('the fallback does not make the whole frame the subject',
+		coverage < 0.9, (coverage * 100).toFixed(1) + '%');
+	check('the fallback still finds the subject',
+		iou(mask, ellipseTruth()) > 0.9, iou(mask, ellipseTruth()).toFixed(4));
+
+	// The combined weak rule needs both measurements to be poor, which spares
+	// small subjects. A mask made of nothing but backdrop colour is wrong
+	// however steady its boundary, so purity condemns it on its own.
+	const dark = Engine.assess(cut, {
+		mode: 'luminance', luminanceSubject: 'dark', luminanceThreshold: 'auto'
+	});
+	const light = Engine.assess(cut, {
+		mode: 'luminance', luminanceSubject: 'light', luminanceThreshold: 'auto'
+	});
+	const worst = dark.purity < light.purity ? dark : light;
+	check('a cut of nothing but backdrop colour is condemned on purity alone',
+		worst.purity < 0.2 && worst.weak === true,
+		'purity ' + worst.purity.toFixed(2) + ' stability ' + worst.stability.toFixed(2));
+}
+
+/* -------------------------------- summary ------------------------------- */
 console.log(`\n${'-'.repeat(52)}`);
 console.log(`${passed} passed, ${failed} failed`);
 process.exit(failed === 0 ? 0 : 1);

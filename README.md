@@ -88,10 +88,24 @@ rendered, and these are set from what the measurement shows:
 
 | Setting | Decided from |
 | --- | --- |
-| Background vs Contrast | Each method is actually run and scored (see below). Background modelling wins ties, because it uses colour *and* connectivity while a brightness split ignores what is joined to the frame. |
+| Detection method | If the file carries a meaningful alpha channel, that **is** the shape and nothing is thresholded. Otherwise each method is run and scored (see below). |
+| Background vs Contrast | Scored against each other. Background modelling wins ties, because it uses colour *and* connectivity while a brightness split ignores what is joined to the frame. |
 | Darker or lighter subject | The backdrop's own brightness: a light backdrop means a dark subject. |
 | Largest island only | How the mask splits into objects. On when one object clearly dominates and the rest are small strays; off when two are comparable, which usually means a genuine second subject. |
 | Fill holes | The size of the enclosed gaps actually present, with headroom. |
+
+**A file that already has its shape is left alone.** An AI cut-out brought in
+as a PNG is not re-thresholded, for two reasons. It would be redundant —
+thresholding can only approximate what the file states exactly — and it is
+actively harmful, because when the subject is cropped at the frame part of the
+border ring is the subject itself, so the backdrop model gets built out of the
+thing it is meant to remove. Measured on a cut-out whose subject runs off the
+top and bottom edges, thresholding agreed with the file's own alpha at 0.49;
+honouring the alpha agrees at 1.00.
+
+Asking for **Alpha** on a file that has no transparency used to copy an
+all-opaque channel into the mask and fill the entire frame with one solid
+shape. It now models the backdrop instead, and says so under the Mode control.
 
 **Methods are tried, not guessed.** Choosing between background modelling and
 Contrast used to be a rule of thumb about how uneven the backdrop looked —

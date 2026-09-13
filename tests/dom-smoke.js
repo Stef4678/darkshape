@@ -1230,6 +1230,100 @@ async function queueEvaluationChecks() {
 }
 
 /* ------------------------------------------------------------------ *
+ * Phase I — folder export keeps every file
+ * ------------------------------------------------------------------ */
+
+async function exportCollisionChecks() {
+	section('Phase I \u2014 two sources with the same name both export');
+
+	const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'darkshape-export-'));
+	const folderA = path.join(tempRoot, 'A');
+	const folderB = path.join(tempRoot, 'B');
+	const outDir = path.join(tempRoot, 'out');
+	[folderA, folderB, outDir].forEach((d) => fs.mkdirSync(d, { recursive: true }));
+
+	// Eagle allows the same filename in different folders, so this is a
+	// legitimate selection: the same name twice.
+	const items = ['A', 'B'].map((tag, i) => {
+		const dir = i === 0 ? folderA : folderB;
+		const filePath = path.join(dir, 'IMG_0001.jpg');
+		fs.writeFileSync(filePath, TINY_PNG);
+		return {
+			id: 'dup-' + i, name: 'IMG_0001.jpg', ext: 'jpg',
+			filePath: filePath, thumbnailPath: '', folders: [], tags: []
+		};
+	});
+
+	const ctx = buildWindow({
+		beforeParse(window) {
+			window.require = require;
+			window.eagle = {
+				app: { theme: 'DARK', platform: 'win32', isDarkColors: () => true },
+				os: { tmpdir: () => tempRoot },
+				item: {
+					getSelected: async () => items,
+					getById: async (id) => items.find((x) => x.id === id) || null,
+					select: async () => true,
+					addFromPath: async () => 'new-1'
+				},
+				folder: { getAll: async () => [] },
+				dialog: {
+					// The export asks for a destination folder every time.
+					showOpenDialog: async (options) => (
+						options && options.properties && options.properties.includes('openDirectory')
+							? { canceled: false, filePaths: [outDir] }
+							: { canceled: true, filePaths: [] }
+					)
+				},
+				notification: { show() { } },
+				shell: { showItemInFolder() { }, openExternal() { } },
+				window: {
+					minimize() { }, maximize() { }, unmaximize() { }, hide() { },
+					isMaximized: async () => false, setBackgroundColor() { }
+				},
+				library: { path: tempRoot, info: async () => ({ name: 'Export Library' }) },
+				plugin: { manifest: { id: 'darkshape', name: 'Darkshape' } },
+				log: { info() { }, warn() { }, error() { }, debug() { } },
+				onPluginCreate: () => { },
+				onPluginRun: (callback) => { setTimeout(() => callback(), 0); },
+				onPluginShow: () => { },
+				onThemeChanged: () => { }
+			};
+		}
+	});
+
+	const { window, errors } = ctx;
+	await settle(700);
+	await flush(40);
+
+	const doc = window.document;
+	doc.getElementById('inputSuffix').value = '_sil';
+	doc.getElementById('inputSuffix').dispatchEvent(new window.Event('input', { bubbles: true }));
+	await flush(10);
+
+	doc.getElementById('btnExportFolder').dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+	await settle(1200);
+	await flush(60);
+
+	const written = fs.existsSync(outDir) ? fs.readdirSync(outDir).sort() : [];
+	check('two same-named sources produce two files',
+		written.length === 2, written.join(', ') || '(none)');
+	check('the second file is disambiguated rather than overwriting the first',
+		written.join(',') === 'IMG_0001_sil-2.png,IMG_0001_sil.png', written.join(','));
+	check('both files are non-empty',
+		written.every((f) => fs.statSync(path.join(outDir, f)).size > 0),
+		written.map((f) => fs.statSync(path.join(outDir, f)).size).join(','));
+	check('the run reports both as finished',
+		/finished/i.test(doc.getElementById('statusTitle').textContent),
+		doc.getElementById('statusTitle').textContent);
+	check('no errors while exporting',
+		errors.length === 0, errors.join(' | '));
+
+	ctx.dom.window.close();
+	fs.rmSync(tempRoot, { recursive: true, force: true });
+}
+
+/* ------------------------------------------------------------------ *
  * main
  * ------------------------------------------------------------------ */
 
@@ -1243,6 +1337,7 @@ async function queueEvaluationChecks() {
 		await settingsPersistenceChecks();
 		await unreliableChecks();
 		await queueEvaluationChecks();
+		await exportCollisionChecks();
 	} catch (err) {
 		check('test run completed', false, err && err.stack ? err.stack.split('\n')[0] : String(err));
 	}
