@@ -51,40 +51,15 @@ the detection and refinement controls to the left.
 
 ![The Darkshape window: the detection and refine panels beside a split view of the original photograph and its black silhouette](assets/Screenshot%202026-09-13%20132746.png)
 
-**Detection.** Four methods, with the brightness split shown as the level it
-actually resolved to rather than just the word "Auto".
+**Deep gradient and rim light.** A generated backdrop with a backlit halo
+hugging the profile, aimed from any of eight directions or evenly all round.
 
-![The Detection panel in Contrast mode, showing the brightness split, the subject side and the invert switch](assets/Screenshot%202026-09-13%20132558.png)
-
-**Refinement.** Every control reports what it actually did on the current image,
-so a control with nothing to do does not look broken.
-
-![The Refine panel: edge softness, drop specks, fill holes and largest island only, each with a note describing what it changed](assets/Screenshot%202026-09-13%20132613.png)
-
-**Looks and shapes.** Five one-click recipes, three shape styles and a row of
-silhouette colours.
-
-![The Style panel: five look presets, solid/outline/luminous shapes, silhouette colour swatches and the background picker](assets/Screenshot%202026-09-13%20132645.png)
-
-**Scene backdrops.** Four generated backdrops, painted procedurally at any
-output size rather than loaded as images.
-
-![The Style panel with the Scene tab open, showing the vibrant sunset, golden hour, deep gradient and studio white tiles](assets/Screenshot%202026-09-12%20204330.png)
-
-**Rim light.** A backlit halo hugging the profile, aimed from any of eight
-directions or evenly all round.
-
-![The Rim light panel: intensity, width, light colour swatches and a nine-way direction picker](assets/Screenshot%202026-09-12%20204236.png)
+![The Rim light panel beside a silhouette on the deep gradient backdrop, showing intensity, width, light colour swatches and a nine-way direction picker](assets/Screenshot%202026-09-12%20204236.png)
 
 **Luminous.** For images that already carry their own light — long-exposure
 water, smoke, fireworks, backlit haze.
 
 ![A luminous silhouette: a glowing golden form on a deep indigo field](assets/Screenshot%202026-09-12%20204601.png)
-
-**Output.** Where the results go, what they are called, and what they are
-tagged with.
-
-![The Output panel: trim to shape, name suffix, save-into folder, tags and select-new-items](assets/Screenshot%202026-09-13%20132724.png)
 
 ---
 
