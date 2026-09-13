@@ -6,9 +6,11 @@ folder's worth of images and convert them in one batch.
 
 ![Darkshape](logo.png)
 
+![The Darkshape window in Eagle, showing the original photograph and the rendered silhouette side by side](assets/Screenshot%202026-09-13%20132746.png)
+
 ---
 
-## What it does
+## Features
 
 Pick a subject out of any photo and render it as a pure shape — solid black on
 transparency by default, or any colour on any background. The result is a new
@@ -32,12 +34,54 @@ other asset.
   Luminous set the backdrop, edge light and crispness together.
 - **Live split comparison** — drag the divider to compare the original and the
   silhouette at the same crop.
+- **Tells you when it cannot help** — photos whose subject and backdrop share a
+  tone are reported rather than guessed at, and a whole queue is checked before
+  the run starts.
 - **Non-destructive** — originals are never modified; results are added as new
   items.
+- **Fully offline** — no network access, no telemetry, no external binaries,
+  no dependencies.
 
 ---
 
-## Install
+## Screenshots
+
+**Refinement.** Every control reports what it actually did on the current image,
+so a control with nothing to do does not look broken.
+
+![The Refine panel: edge softness, drop specks, fill holes and largest island only, each with a note describing what it changed](assets/Screenshot%202026-09-13%20132613.png)
+
+**Looks and backdrops.** Five one-click recipes, three shape styles, and four
+generated scenes.
+
+![The Style panel: five look presets, solid/outline/luminous shapes, silhouette colour swatches and the scene picker](assets/Screenshot%202026-09-13%20132645.png)
+
+**Detection.** Four methods, with the brightness split shown as the level it
+actually resolved to rather than just the word "Auto".
+
+![The Detection panel in Contrast mode, showing the brightness split, the subject side and the invert switch](assets/Screenshot%202026-09-13%20132558.png)
+
+**Luminous.** For images that already carry their own light — long-exposure
+water, smoke, fireworks, backlit haze.
+
+![A luminous silhouette: a glowing golden form on a deep indigo field, with the rim light direction picker visible](assets/Screenshot%202026-09-12%20204601.png)
+
+---
+
+## Requirements
+
+- **Eagle 4.x** (eagle.cool), on Windows or macOS.
+- **Nothing else.** No Node.js, no Python, no ImageMagick, no external
+  binaries, and no runtime dependencies — the plugin ships as four JavaScript
+  files, a stylesheet and a manifest, and Eagle runs them directly.
+- **No network connection** is used at any point.
+
+The bundled `tools/install.ps1` is a PowerShell script and therefore
+Windows-only. On macOS, install by hand — see below.
+
+---
+
+## Installation
 
 Eagle plugins are just a folder, so installation is a clone and a copy:
 
@@ -54,16 +98,37 @@ Then restart Eagle so it rescans its plugin directory. The plugin appears in
 Eagle's plugin list as **Darkshape**.
 
 The script copies only the runtime files into
-`%APPDATA%\Eagle\Plugins\darkshape-silhouette-studio\`. To install by hand,
-copy `manifest.json`, `logo.png`, `index.html`, `css/` and `js/` into a folder
-of that name inside `%APPDATA%\Eagle\Plugins\`.
+`%APPDATA%\Eagle\Plugins\darkshape-silhouette-studio\`.
 
-**Requirements:** Eagle 4.x. No network access, no external binaries, no
-dependencies — everything runs locally in the plugin window.
+**Installing by hand** — on any platform, create a folder called
+`darkshape-silhouette-studio` inside Eagle's plugin directory and copy these
+into it:
+
+```
+manifest.json
+logo.png
+index.html
+css/
+js/
+```
+
+The plugin directory is:
+
+| Platform | Plugin folder |
+| --- | --- |
+| Windows | `%APPDATA%\Eagle\Plugins\` |
+| macOS | typically `~/Library/Application Support/Eagle/Plugins/` — see [Where are Eagle plugins installed?](https://en.eagle.cool/support/article/where-are-eagle-plugins-installed-on-my-computer) |
+
+I have only been able to test the Windows path, so if the macOS folder is
+somewhere else, Eagle's own article above is the authority.
+
+`manifest.json` must sit at the top level of that folder, not inside a nested
+one. The `tools/`, `tests/` and `assets/` folders are development files and are
+not needed to run the plugin.
 
 ---
 
-## Using it
+## Usage
 
 1. Select one or more images in Eagle.
 2. Open **Darkshape** from the plugin menu.
@@ -324,6 +389,64 @@ The panel folds away anything that the current mode does not use.
 
 ---
 
+## Project structure
+
+```
+darkshape/
+├── manifest.json          Eagle plugin manifest — id, name, version, window size
+├── index.html             the entire interface
+├── logo.png               plugin icon
+├── css/
+│   └── style.css          design tokens and the whole visual system
+├── js/
+│   ├── engine.js          silhouette extraction, scenes, compositing
+│   ├── bridge.js          every Eagle API call, each with a fallback
+│   └── app.js             interface state, preview, batch runner
+├── tools/
+│   ├── install.ps1        copies the runtime files into Eagle (Windows)
+│   ├── render.js          render an image from the command line, no Eagle needed
+│   └── make-logo.ps1      regenerates logo.png
+├── tests/
+│   ├── engine.test.js     the algorithm, against synthetic images with known truth
+│   └── dom-smoke.js       the interface, in jsdom, against a mocked Eagle host
+├── assets/                screenshots used by this README
+├── package.json           dev dependencies and scripts
+└── LICENSE                MIT
+```
+
+Only `manifest.json`, `logo.png`, `index.html`, `css/` and `js/` are needed to
+run the plugin. Everything else is development scaffolding.
+
+The three JavaScript files are deliberately separated: `engine.js` has no
+knowledge of Eagle or of the DOM beyond `ImageData`, `bridge.js` is the only
+file that talks to Eagle, and `app.js` wires the two to the interface.
+
+---
+
+## Privacy & data
+
+Darkshape does its work inside the plugin window and nowhere else.
+
+- **No network access.** The plugin makes no requests of any kind — no update
+  check, no licence check, no telemetry, no analytics, no crash reporting. The
+  scene backdrops are painted from colour stops and radial glows rather than
+  downloaded, so there are no external assets either.
+- **No image ever leaves your machine.** Photos are read from disk, rendered in
+  the plugin window, and written back locally.
+- **Originals are never modified.** Results are added to the library as new
+  items, or exported as PNG files to a folder you choose. Nothing is
+  overwritten — two sources that happen to share a filename are written under
+  distinct names rather than one replacing the other.
+- **Nothing is collected.** There is no account, no identifier and no usage
+  data, and the plugin cannot see anything in your library that you have not
+  selected.
+
+The only thing Darkshape stores is your own settings, in the plugin's
+`localStorage` inside Eagle, so they survive a restart. **Reset settings** at
+the bottom of the panel clears them back to the defaults.
+
+---
+
 ## How it works
 
 The engine lives in `js/engine.js` and is deliberately separate from both Eagle
@@ -396,9 +519,11 @@ interactive; exports run at up to 4096px on the long edge.
 ## Development
 
 ```
+npm install           # jsdom, pngjs and jpeg-js — dev dependencies only
 npm test              # both suites
 npm run test:engine   # silhouette algorithm, no DOM required
 npm run test:ui       # interface + Eagle integration, jsdom
+npm run render        # render an image from the command line
 npm run logo          # regenerate logo.png
 npm run install-plugin
 ```
@@ -413,16 +538,11 @@ It uses the real engine behind a small canvas shim and prints a luminance
 histogram, which is how the Luminous preset was tuned against a set of
 reference plates.
 
-The tests need `jsdom`, and the render tool needs `pngjs` and `jpeg-js`. Both
+The tests need `jsdom`, and the render tool needs `pngjs` and `jpeg-js`. They
 are declared as dev dependencies and deliberately kept out of the plugin's
-runtime footprint — nothing in `js/` requires them:
-
-```
-npm install
-```
-
-The harnesses look for them in `node_modules/` first and fall back to a local
-`.devtools/node_modules/`, so either layout works.
+runtime footprint — nothing in `js/` requires them. The harnesses look in
+`node_modules/` first and fall back to a local `.devtools/node_modules/`, so
+either layout works.
 
 `tests/engine.test.js` drives the real pipeline over synthetic images with
 known ground truth and scores the result with intersection-over-union. It runs
@@ -432,33 +552,82 @@ head-less against a small `ImageData`/canvas polyfill.
 `app.js`. It checks static structure first, then boots the plugin standalone to
 verify the degraded state, then boots it against a mocked Eagle host and runs a
 full batch export — verifying names, folders, tags, staging-file cleanup and
-the selection handoff. A final phase covers the look presets, the scene picker
-and migration of settings written by an earlier version.
+the selection handoff. Later phases cover the look presets, the scene picker,
+migration of settings written by an earlier version, the reliability warning,
+and regression tests for the activation race and the export filename collision.
 
-```
-js/engine.js    silhouette extraction, scenes and compositing (no DOM beyond ImageData)
-js/bridge.js    every Eagle API call, with fallbacks
-js/app.js       interface state, preview, batch runner
-css/style.css   design tokens and the whole visual system
-```
+318 assertions in total.
 
 ---
 
-## Notes and limits
+## Troubleshooting
 
-- Sources are capped at **4096px** on the long edge for export, which keeps
-  peak memory comfortable on large photos.
-- Decodable inputs are `jpg`, `jpeg`, `png`, `webp`, `gif`, `bmp` and `avif`.
-  Anything else is skipped with a notice — Chromium cannot decode `heic`,
-  `tiff` or raw formats, so they are rejected up front rather than failing
-  mid-run.
-- Background modelling expects the subject to be reasonably separated from the
-  backdrop. For busy scenes, try `Contrast` mode or lower the tolerance.
-- Everything runs offline in the plugin window. No image ever leaves your
-  machine.
+**The plugin does not appear in Eagle.** Restart Eagle after installing, so it
+rescans its plugin folder. Check that `manifest.json` is at the top level of
+`Eagle/Plugins/darkshape-silhouette-studio/` and not inside a nested folder.
+
+**"Nothing selected".** Darkshape works from Eagle's current selection. Select
+one or more images in the library first, or drop image files onto the plugin
+window.
+
+**A file is skipped.** Decodable inputs are `jpg`, `jpeg`, `png`, `webp`, `gif`,
+`bmp` and `avif`. Anything else is refused up front with a reason — Chromium
+cannot decode `heic`, `tiff` or camera raw formats, so they cannot be processed
+here.
+
+**The result is a shapeless blob, or an amber warning appears.** The subject
+and the backdrop share a tone and no threshold can separate them. Darkshape
+says so rather than pretending. Try the other detection mode first —
+**Contrast** and **Background** fail in opposite situations. If neither works,
+bring in a cut-out PNG from an AI background remover: drop it in and Darkshape
+will use its transparency as the shape, then style it.
+
+**Fill holes does nothing.** By design in `Auto` and `Background` mode. The
+background is grown inwards from the frame, so it can never reach an enclosed
+region and shapes already come out solid. The control earns its keep in
+`Contrast` and `Alpha` mode.
+
+**The edge is too ragged, or too soft.** Raise **Edge softness** to erase fur
+and fabric bumps, or lower it for a crisper line. The note under the slider
+reports the feather radius in pixels for the current image — that is the number
+to watch, because the same setting gives a different radius on a small photo
+than on a large one.
+
+**Batch runs are slower than expected.** Every image is read twice: once small,
+to decide how to cut it, then once at full size to render. Analysing the queue
+before a run adds roughly 30–170 ms per photo on top of that.
+
+**A run appears to stop partway.** The runner yields to the window between
+images. If Eagle has hidden or fully covered the plugin window, the browser may
+suspend animation frames, and the run will resume when the window is visible
+again. Bring it to the front and it continues.
+
+**Settings are not sticking.** Settings are stored inside Eagle, so they are
+specific to that Eagle installation. **Reset settings** returns everything to
+the defaults.
 
 ---
 
-## Licence
+## Contact
 
-MIT — see [LICENSE](LICENSE).
+Questions, bug reports and feature requests are welcome:
+
+- **GitHub:** [Stef4678/darkshape](https://github.com/Stef4678/darkshape) —
+  please [open an issue](https://github.com/Stef4678/darkshape/issues)
+- **Email:** [stefaninfp@gmail.com](mailto:stefaninfp@gmail.com)
+
+When reporting a problem, the most useful things to include are the Eagle
+version, your platform, and — if a particular photo misbehaves — what the
+plugin said about it. The note under **Mode** and the status bar both report
+what was measured, and a screenshot of those usually identifies the cause
+immediately.
+
+---
+
+## License
+
+Released under the MIT License.
+
+MIT © 2026 Kerekes Stefan
+
+See [LICENSE](LICENSE) for the full text.
