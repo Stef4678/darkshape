@@ -131,24 +131,6 @@ somewhere else, Eagle's own article above is the authority.
 one. The `tools/`, `tests/`, `assets/` and `dist/` folders are development
 files and are not needed to run the plugin.
 
-### The packaged plugin
-
-`dist/Darkshape-<version>.eagleplugin` is the packaged plugin — the file Eagle
-expects for installation from a package, and the file to upload when submitting
-to the Eagle Plugin Center. It is committed to the repository and attached to
-each release, and it is rebuilt with:
-
-```
-npm run package
-```
-
-Do not use Eagle's own **Pack Plugin** on this project. It zips the whole
-registered folder, which here means 47 MB of `.git`, `.devtools` and
-`.npm-cache` would be swept into the submission — and Eagle's
-[package contents criteria](https://developer.eagle.cool/plugin-api/plugin-review/criteria/package-contents.md)
-reject development artifacts. `tools/package.ps1` packages only the runtime
-files and prints what it left behind, so the difference is never a mystery.
-
 ---
 
 ## Usage
