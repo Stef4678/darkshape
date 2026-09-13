@@ -108,7 +108,17 @@
 			return { items: [], skipped: [] };
 		}
 
-		var selected = await api.item.getSelected();
+		// The one host call that can fail while the user is watching — Eagle
+		// closing, an IPC hiccup — and the only one that used to be left
+		// unguarded. A rejection here surfaced as an unhandled promise and a
+		// button that silently did nothing.
+		var selected;
+		try {
+			selected = await api.item.getSelected();
+		} catch (err) {
+			warn('could not read the Eagle selection:', err && err.message);
+			throw new Error('Eagle did not return the current selection.');
+		}
 		if (!Array.isArray(selected)) selected = [];
 
 		var items = [];
@@ -195,7 +205,10 @@
 			throw new Error('No readable path for ' + (item.name || item.id));
 		}
 		var image = await decodeImage(dataUrl);
-		image._darkshapeUrl = dataUrl;
+		// The data URL itself is deliberately not kept on the image. It is
+		// roughly 1.33x the file size as a string, nothing reads it, and
+		// pinning it here keeps it alive for as long as the decoded bitmap —
+		// which defeats releasing the bitmap on navigation.
 		return image;
 	}
 

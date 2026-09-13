@@ -1792,7 +1792,7 @@
 		parseColor: parseColor,
 		SCENES: SCENES,
 		RIM_DIRECTIONS: RIM_DIRECTIONS,
-		VERSION: '1.18.0'
+		VERSION: '1.19.0'
 	};
 })(typeof window !== 'undefined' ? window : this);
 

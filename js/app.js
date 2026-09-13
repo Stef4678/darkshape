@@ -320,6 +320,9 @@
 
 	var previewTimer = null;
 	var previewToken = 0;
+	// Guards activate() the same way previewToken guards renderPreview(): a
+	// decode that finishes after the user has moved on must not render.
+	var activationToken = 0;
 
 	/* ------------------------------------------------------------------ *
 	 * Small utilities
@@ -601,7 +604,12 @@
 			}
 		}
 
-		container.addEventListener('click', function (event) {
+		// The container outlives the swatches inside it — only its children are
+		// replaced — so the handler has to be swapped rather than added again.
+		// buildSwatches runs on every activation, and without this a single
+		// click would run the whole save path once per image viewed.
+		if (container._swatchClick) container.removeEventListener('click', container._swatchClick);
+		container._swatchClick = function (event) {
 			var button = event.target.closest('.swatch[data-color]');
 			if (!button) return;
 			params[key] = button.dataset.color;
@@ -609,7 +617,8 @@
 			sync();
 			saveSettings();
 			if (onChange) onChange(params[key]);
-		});
+		};
+		container.addEventListener('click', container._swatchClick);
 
 		input.addEventListener('input', function () {
 			params[key] = input.value;
@@ -1063,7 +1072,21 @@
 			return;
 		}
 
-		var result = await Bridge.getSelectedItems();
+		if (state.running) {
+			if (!silent) refuseDuringRun();
+			return;
+		}
+
+		var result;
+		try {
+			result = await Bridge.getSelectedItems();
+		} catch (err) {
+			// Without this a host hiccup left an unhandled rejection and a
+			// reload button that appeared to do nothing at all.
+			if (!silent) toast('Could not read the Eagle selection', err.message, 'error');
+			setStatus('error', 'Could not read the selection', err.message);
+			return;
+		}
 
 		if (result.skipped.length) {
 			toast(
@@ -1082,7 +1105,23 @@
 		setItems(result.items.map(makeEntry), 'eagle');
 	}
 
+	/**
+	 * Refuses to replace the queue while a run is exporting from it.
+	 *
+	 * A run works from a snapshot of the queue. Loading a new selection, or
+	 * adding dropped files, swaps the queue underneath it: the run keeps
+	 * exporting images the window no longer shows, the completion count
+	 * describes a queue that is gone, and the released-bitmap bookkeeping
+	 * starts comparing snapshot positions against a different list.
+	 */
+	function refuseDuringRun() {
+		if (!state.running) return false;
+		toast('A run is in progress', 'Let it finish before changing the selection.', 'warn');
+		return true;
+	}
+
 	async function pickFiles() {
+		if (refuseDuringRun()) return;
 		var paths = await Bridge.chooseImageFiles();
 		if (!paths.length) return;
 		var entries = paths.map(function (p) {
@@ -1280,13 +1319,26 @@
 
 	async function ensureImage(entry) {
 		if (entry.image) return entry.image;
-		var image = await Bridge.loadImage(entry);
-		entry.image = image;
-		return image;
+
+		// Share one decode between callers. Loading a queue starts the first
+		// activation and the evaluation pass at the same moment, and without
+		// this the first image is read and decoded twice.
+		if (!entry.imagePromise) {
+			entry.imagePromise = Bridge.loadImage(entry).then(function (image) {
+				entry.image = image;
+				return image;
+			}, function (err) {
+				entry.imagePromise = null;
+				throw err;
+			});
+		}
+		return entry.imagePromise;
 	}
 
 	async function activate(index) {
 		if (index < 0 || index >= state.items.length) return;
+		var token = ++activationToken;
+
 		state.activeIndex = index;
 		state.image = null;
 		state.preview = null;
@@ -1301,15 +1353,45 @@
 		setStatus('busy', 'Loading', entry.name);
 
 		try {
-			state.image = await ensureImage(entry);
+			var image = await ensureImage(entry);
+
+			// A newer activation has already rendered. Without this the slower
+			// decode wins the race: the queue highlights the photo the user
+			// picked while the canvas and the status describe an earlier one,
+			// and applyAutoTune has meanwhile written that other photo's
+			// settings into the shared controls. Holding an arrow key is
+			// enough to trigger it, since every keypress activates.
+			if (token !== activationToken) {
+				releaseBitmaps(state.items[state.activeIndex]);
+				return;
+			}
+
+			// One decoded bitmap at a time. Caching every image the user looks
+			// at keeps a whole queue resident at full size.
+			releaseBitmaps(entry);
+
+			state.image = image;
 			applyAutoTune(state.image);
 			// renderPreview owns the status from here: it knows the preview
 			// size, how long it took, and whether the cut can be trusted.
 			renderPreview();
 		} catch (err) {
+			// A stale failure must not blank a preview that is already correct.
+			if (token !== activationToken) return;
 			showEmptyState('That image could not be opened', err.message);
 			setStatus('error', 'Could not open image', err.message);
 		}
+	}
+
+	/** Keeps only the given entry's decoded bitmap, releasing the rest. */
+	function releaseBitmaps(keep) {
+		state.items.forEach(function (e) {
+			if (e === keep) return;
+			e.image = null;
+			// The in-flight promise has to go too, or a later ensureImage
+			// would hand back the bitmap this just released.
+			e.imagePromise = null;
+		});
 	}
 
 	function schedulePreview() {
@@ -1632,6 +1714,8 @@
 			depth = 0;
 			el.stage.classList.remove('is-dropping');
 
+			if (refuseDuringRun()) return;
+
 			var files = Array.prototype.slice.call(event.dataTransfer ? event.dataTransfer.files : []);
 			var entries = [];
 			var skipped = 0;
@@ -1679,6 +1763,17 @@
 			group.appendChild(option);
 		});
 		el.selectFolder.appendChild(group);
+
+		// The saved target may name an Eagle folder that did not exist as an
+		// option when the controls were last synced, so assigning it silently
+		// did nothing and the dropdown showed the default while exports still
+		// went to the saved folder. Re-apply it now the option is there, and
+		// fall back honestly if the folder has since been deleted.
+		el.selectFolder.value = params.folderMode;
+		if (el.selectFolder.selectedIndex < 0) {
+			el.selectFolder.value = 'same';
+			params.folderMode = 'same';
+		}
 	}
 
 	function resolveFolders(entry) {
@@ -1706,6 +1801,9 @@
 		el.btnRun.disabled = busy || count === 0;
 		el.btnExportFolder.disabled = busy || count === 0;
 		el.btnReloadSelection.disabled = busy;
+		// Picking files or dropping them also replaces the queue, so they are
+		// closed for the duration too, not just the reload button.
+		el.btnPickFiles.disabled = busy;
 		el.runLabel.textContent = count > 1 ? 'Create ' + count + ' silhouettes' : 'Create silhouette';
 	}
 
@@ -1874,6 +1972,12 @@
 				delete el.noteAutoTune.dataset.state;
 				el.weakHint.hidden = true;
 			}
+			// The queue verdict belongs to auto-tune, so it follows the
+			// switch: turning it off clears the report rather than leaving a
+			// stale "All 4 can be separated" on screen, and turning it on
+			// earns the report for a queue loaded while it was off.
+			if (on) evaluateQueue();
+			else reportQueueEvaluation();
 		});
 
 		bindSegmented(el.segMode, 'mode', renderAll);
@@ -2013,7 +2117,12 @@
 			userTouched = {};
 			saveSettings();
 			applySettingsToControls();
+			// Auto-tune is a default again, so re-read the photo rather than
+			// only redrawing the controls: the note under the switch and the
+			// settings it derives have to be recomputed too.
+			if (state.image) applyAutoTune(state.image);
 			renderAll();
+			reportQueueEvaluation();
 			toast('Settings reset', 'Every control is back to its default.', 'success');
 		});
 
@@ -2034,9 +2143,11 @@
 				});
 			});
 
-		// Switches
-		[['invert', el.swInvert], ['keepLargest', el.swLargest], ['trim', el.swTrim],
-			['rimLight', el.swRim], ['selectAfter', el.swSelect]]
+		// Switches. Auto-tune belongs here too: it is a switch whose state has
+		// to survive a reset like any other, and leaving it out left it showing
+		// off while the plugin was auto-tuning, one click out of phase.
+		[['autoTune', el.swAutoTune], ['invert', el.swInvert], ['keepLargest', el.swLargest],
+			['trim', el.swTrim], ['rimLight', el.swRim], ['selectAfter', el.swSelect]]
 			.forEach(function (pair) {
 				pair[1].classList.toggle('is-on', !!params[pair[0]]);
 				pair[1].setAttribute('aria-checked', params[pair[0]] ? 'true' : 'false');

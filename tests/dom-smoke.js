@@ -174,7 +174,13 @@ function installRasterStubs(window, options) {
 		return 'data:image/png;base64,' + Buffer.from('px' + hash.toString(16)).toString('base64');
 	};
 
-	// Images "decode" instantly and report a fixed intrinsic size.
+	// Images "decode" instantly and report a fixed intrinsic size. A test can
+	// supply `decodeDelay(dataUrl)` to make one image resolve later than
+	// another (the activation race), `imageSize(dataUrl)` to give each source a
+	// distinguishable preview size, and `onDecode(dataUrl)` to count decodes.
+	const decodeDelay = options && options.decodeDelay;
+	const imageSize = options && options.imageSize;
+	const onDecode = options && options.onDecode;
 	window.Image = class Image {
 		constructor() {
 			this.naturalWidth = 640;
@@ -187,7 +193,16 @@ function installRasterStubs(window, options) {
 		}
 		set src(value) {
 			this._src = value;
-			setTimeout(() => { if (typeof this.onload === 'function') this.onload(); }, 0);
+			if (typeof onDecode === 'function') onDecode(value);
+			if (typeof imageSize === 'function') {
+				const size = imageSize(value);
+				if (size) {
+					this.naturalWidth = this.width = size.width;
+					this.naturalHeight = this.height = size.height;
+				}
+			}
+			const wait = typeof decodeDelay === 'function' ? (decodeDelay(value) || 0) : 0;
+			setTimeout(() => { if (typeof this.onload === 'function') this.onload(); }, wait);
 		}
 		get src() { return this._src; }
 	};
@@ -1324,6 +1339,239 @@ async function exportCollisionChecks() {
 }
 
 /* ------------------------------------------------------------------ *
+ * Phase J — regressions found by the interface audit
+ * ------------------------------------------------------------------ */
+
+async function auditRegressionChecks() {
+	section('Phase J \u2014 regressions from the interface audit');
+
+	const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'darkshape-audit-'));
+	const sourceDir = path.join(tempRoot, 'lib');
+	fs.mkdirSync(sourceDir, { recursive: true });
+
+	/*
+	 * Three sources whose decodes take different times and whose previews have
+	 * different sizes, so a finished render can be identified from the status
+	 * line. The data URL length is the only thing that distinguishes them, so
+	 * the files are padded to different sizes.
+	 */
+	const mkItem = (id, pad, size) => {
+		const name = id + '.png';
+		const filePath = path.join(sourceDir, name);
+		fs.writeFileSync(filePath, Buffer.concat([TINY_PNG, Buffer.alloc(pad, 7)]));
+		return { id, name, ext: 'png', filePath, thumbnailPath: '', folders: [], tags: [], _size: size };
+	};
+	const slow = mkItem('slow', 900, { width: 800, height: 300 });
+	const fast = mkItem('fast', 0, { width: 512, height: 512 });
+	const other = mkItem('other', 300, { width: 640, height: 400 });
+	const items = [other, slow, fast];
+
+	// Match a data URL to its source by nearest computed length, so the test
+	// does not depend on the exact data-URL prefix the bridge uses.
+	const lenOf = (item) => 'data:image/png;base64,'.length +
+		Math.ceil(fs.readFileSync(item.filePath).length / 3) * 4;
+	const lens = { slow: lenOf(slow), other: lenOf(other), fast: lenOf(fast) };
+	const which = (src) => {
+		let best = 'fast';
+		let bestGap = Infinity;
+		Object.keys(lens).forEach((key) => {
+			const gap = Math.abs(lens[key] - src.length);
+			if (gap < bestGap) { bestGap = gap; best = key; }
+		});
+		return best;
+	};
+	const delayFor = { slow: 260, other: 0, fast: 0 };
+	const sizeFor = { slow: slow._size, other: other._size, fast: fast._size };
+	check('the three sources are distinguishable',
+		new Set([lens.slow, lens.other, lens.fast]).size === 3,
+		[lens.slow, lens.other, lens.fast].join(','));
+
+	const decodes = [];
+	const ctx = buildWindow({
+		raster: {
+			// Only the heavily padded source decodes slowly.
+			decodeDelay: (src) => delayFor[which(src)],
+			imageSize: (src) => sizeFor[which(src)],
+			onDecode: (src) => decodes.push(which(src))
+		},
+		beforeParse(window) {
+			window.require = require;
+			window.eagle = {
+				app: { theme: 'DARK', platform: 'win32', isDarkColors: () => true },
+				os: { tmpdir: () => tempRoot },
+				item: {
+					getSelected: async () => items,
+					getById: async (id) => items.find((x) => x.id === id) || null,
+					select: async () => true,
+					addFromPath: async () => 'new-1'
+				},
+				folder: { getAll: async () => [] },
+				dialog: { showOpenDialog: async () => ({ canceled: true, filePaths: [] }) },
+				notification: { show() { } },
+				shell: { showItemInFolder() { }, openExternal() { } },
+				window: {
+					minimize() { }, maximize() { }, unmaximize() { }, hide() { },
+					isMaximized: async () => false, setBackgroundColor() { }
+				},
+				library: { path: sourceDir, info: async () => ({ name: 'Audit Library' }) },
+				plugin: { manifest: { id: 'darkshape', name: 'Darkshape' } },
+				log: { info() { }, warn() { }, error() { }, debug() { } },
+				onPluginCreate: () => { },
+				onPluginRun: (callback) => { setTimeout(() => callback(), 0); },
+				onPluginShow: () => { },
+				onThemeChanged: () => { }
+			};
+		}
+	});
+
+	const { window, errors } = ctx;
+	await settle(1200);
+	await flush(60);
+	const doc = window.document;
+
+	// --- L1: the first image of a queue must be decoded once ---
+	const firstDecodes = decodes.filter((k) => k === 'other').length;
+	check('the first image of a queue is decoded once, not twice',
+		firstDecodes === 1, firstDecodes + ' decodes of the first source');
+
+	const tiles = doc.querySelectorAll('.queue-item');
+	check('the queue has three tiles', tiles.length === 3, String(tiles.length));
+
+	const clickTile = (i) => tiles[i].dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+	const detail = () => doc.getElementById('statusDetail').textContent;
+
+	// --- sanity: the slow source really is identifiable by its size ---
+	clickTile(1);
+	await settle(800);
+	await flush(40);
+	check('a slow source renders its own preview',
+		detail().indexOf('800 × 300') !== -1, detail());
+
+	// Move away, which releases the slow bitmap, so the race below has to
+	// decode it again rather than resolving from cache.
+	clickTile(2);
+	await settle(800);
+	await flush(40);
+	check('the fast source renders its own preview',
+		detail().indexOf('512 × 512') !== -1, detail());
+
+	// --- H1: a slow decode finishing last must not win ---
+	clickTile(1);   // slow: must decode, 260ms
+	clickTile(2);   // fast: still cached, resolves at once
+	await settle(900);
+	await flush(60);
+
+	check('the slow decode does not overwrite the newer activation',
+		detail().indexOf('800 × 300') === -1, detail());
+	check('the preview belongs to the image that was chosen last',
+		detail().indexOf('512 × 512') !== -1, detail());
+	check('the queue highlights the image that was chosen last',
+		doc.querySelectorAll('.queue-item')[2].classList.contains('is-active'),
+		Array.from(doc.querySelectorAll('.queue-item')).map((t) => (t.classList.contains('is-active') ? 'active' : '-')).join(','));
+
+	// --- M4: navigation releases the bitmap it moved away from ---
+	decodes.length = 0;
+	clickTile(1);
+	await settle(800);
+	await flush(40);
+	check('returning to a released image decodes it again',
+		decodes.indexOf('slow') !== -1, decodes.join(','));
+
+	// --- M3: Reset puts the auto-tune switch back in phase ---
+	doc.getElementById('swAutoTune').dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+	await settle(300);
+	await flush(20);
+	check('the switch is off after clicking it off',
+		!doc.getElementById('swAutoTune').classList.contains('is-on'));
+
+	doc.getElementById('btnReset').dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+	await settle(600);
+	await flush(40);
+	check('Reset turns the auto-tune switch back on',
+		doc.getElementById('swAutoTune').classList.contains('is-on'),
+		'aria-checked=' + doc.getElementById('swAutoTune').getAttribute('aria-checked'));
+
+	// --- L3: the queue report follows the auto-tune switch ---
+	doc.getElementById('swAutoTune').dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+	await settle(400);
+	await flush(30);
+	check('switching auto-tune off clears the queue report',
+		doc.getElementById('queueWarn').hidden,
+		doc.getElementById('queueWarn').textContent || '(hidden)');
+
+	doc.getElementById('swAutoTune').dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+	await settle(800);
+	await flush(40);
+	check('switching it back on restores the queue report',
+		!doc.getElementById('queueWarn').hidden,
+		doc.getElementById('queueWarn').textContent || '(hidden)');
+
+	check('no errors during the audit regressions',
+		errors.length === 0, errors.join(' | '));
+
+	ctx.dom.window.close();
+	fs.rmSync(tempRoot, { recursive: true, force: true });
+
+	// --- M5: a host that refuses to return the selection ---
+	{
+		const failRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'darkshape-fail-'));
+		const failCtx = buildWindow({
+			beforeParse(window) {
+				window.require = require;
+				window.eagle = {
+					app: { theme: 'DARK', platform: 'win32', isDarkColors: () => true },
+					os: { tmpdir: () => failRoot },
+					item: {
+						// The one host call that can fail while the user watches.
+						getSelected: async () => { throw new Error('host refused'); },
+						getById: async () => null,
+						select: async () => true,
+						addFromPath: async () => 'new-1'
+					},
+					folder: { getAll: async () => [] },
+					dialog: { showOpenDialog: async () => ({ canceled: true, filePaths: [] }) },
+					notification: { show() { } },
+					shell: { showItemInFolder() { }, openExternal() { } },
+					window: {
+						minimize() { }, maximize() { }, unmaximize() { }, hide() { },
+						isMaximized: async () => false, setBackgroundColor() { }
+					},
+					library: { path: failRoot, info: async () => ({ name: 'Fail Library' }) },
+					plugin: { manifest: { id: 'darkshape', name: 'Darkshape' } },
+					log: { info() { }, warn() { }, error() { }, debug() { } },
+					onPluginCreate: () => { },
+					onPluginRun: (callback) => { setTimeout(() => callback(), 0); },
+					onPluginShow: () => { },
+					onThemeChanged: () => { }
+				};
+			}
+		});
+
+		const w = failCtx.window;
+		await settle(600);
+		await flush(40);
+		const fdoc = w.document;
+
+		// Boot already called it. The reload button must not be a dead end.
+		fdoc.getElementById('btnReloadSelection').dispatchEvent(new w.MouseEvent('click', { bubbles: true }));
+		await settle(600);
+		await flush(40);
+
+		const toasts = Array.from(fdoc.querySelectorAll('#toastStack .toast'))
+			.map((n) => n.textContent).join(' | ');
+		check('a refusing host is reported instead of failing silently',
+			/refus|could not/i.test(toasts) || /could not/i.test(fdoc.getElementById('statusTitle').textContent),
+			toasts || fdoc.getElementById('statusTitle').textContent);
+		check('a refusing host raises no unhandled rejection',
+			!failCtx.errors.some((e) => /unhandled/i.test(e)),
+			failCtx.errors.join(' | '));
+
+		failCtx.dom.window.close();
+		fs.rmSync(failRoot, { recursive: true, force: true });
+	}
+}
+
+/* ------------------------------------------------------------------ *
  * main
  * ------------------------------------------------------------------ */
 
@@ -1338,6 +1586,7 @@ async function exportCollisionChecks() {
 		await unreliableChecks();
 		await queueEvaluationChecks();
 		await exportCollisionChecks();
+		await auditRegressionChecks();
 	} catch (err) {
 		check('test run completed', false, err && err.stack ? err.stack.split('\n')[0] : String(err));
 	}
